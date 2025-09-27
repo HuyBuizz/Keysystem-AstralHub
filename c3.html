@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Astral Hub • Checkpoint 3</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <main class="card" role="main" aria-labelledby="title">
+        <header class="head">
+            <div class="icon" aria-hidden="true">C3</div>
+            <div>
+                <h1 id="title">Checkpoint 3</h1>
+                <div class="sub">Mark completion of Checkpoint 2 & open Locker 3</div>
+            </div>
+        </header>
+
+        <section class="body">
+            <div class="steps">
+                <div class="muted">Progress:</div>
+                <ul class="ok-list">
+                    <li class="muted">Checkpoint 1: already completed</li>
+                    <li id="cp2" class="muted">Checkpoint 2: <span>checking…</span></li>
+                </ul>
+            </div>
+
+            <div class="status">
+                <span id="apiBadge" class="badge" aria-live="polite">
+                    <span class="dot load"></span> Connecting API…
+                </span>
+            </div>
+
+            <div class="cta">
+                <a id="lockerBtn" class="btn" href="#" rel="noopener noreferrer" target="_blank" aria-disabled="true">
+                    Open Checkpoint 3
+                </a>
+                <span class="ghost">Session status: <span id="flowState">not initialized</span></span>
+            </div>
+
+            <div id="errorBox" class="steps" style="display:none; border-color:#ef444455">
+                <div style="color:#ef7b7b; font-weight:700">Error</div>
+                <div id="errMsg" class="muted">—</div>
+            </div>
+        </section>
+
+        <footer class="foot">
+            <div>Tip: Ctrl/Cmd + R to clear <code class="kv">localStorage["astral_flow"]</code> and reload.</div>
+            <div id="debug" class="muted"></div>
+        </footer>
+    </main>
+
+    <script>
+        const API = "https://acc-key-api.bhieu4225.workers.dev";
+        const LOCKER3_URL = "https://lootdest.org/s?LSi5iOVZ";
+
+        const apiBadge = document.getElementById("apiBadge");
+        const flowState = document.getElementById("flowState");
+        const lockerBtn = document.getElementById("lockerBtn");
+        const debug = document.getElementById("debug");
+        const errorBox = document.getElementById("errorBox");
+        const errMsg = document.getElementById("errMsg");
+        const cp2 = document.getElementById("cp2");
+
+        const setBadge = (t, x) => { apiBadge.innerHTML = `<span class="dot ${t}"></span> ${x}`; };
+        const enableLocker = (h) => { lockerBtn.href = h; lockerBtn.removeAttribute("aria-disabled"); lockerBtn.removeAttribute("disabled"); };
+        const disableLocker = () => { lockerBtn.href = "#"; lockerBtn.setAttribute("aria-disabled", "true"); lockerBtn.setAttribute("disabled", "true"); };
+        const showError = (m) => { errorBox.style.display = ""; errMsg.textContent = m; };
+
+        const j = (url, init = {}) => fetch(url, { ...init, headers: { ...(init.headers || {}), "cache-control": "no-cache" } }).then(r => r.json());
+        async function fetchState(flow, tries = 3) {
+            for (let i = 0; i < tries; i++) {
+                try { const s = await j(`${API}/flow/state?flow=${encodeURIComponent(flow)}&t=${Date.now()}`); if (s && s.ok) return s; } catch { }
+                await new Promise(r => setTimeout(r, 300));
+            }
+            return null;
+        }
+
+        (async () => {
+            disableLocker(); setBadge("load", "Connecting API…");
+
+            let flow = localStorage.getItem("astral_flow");
+            let data = localStorage.getItem("astral_data");
+            if (!flow) {
+                setBadge("warn", "No session");
+                showError("No flow found. Please start from C1.");
+                return;
+            }
+
+            flowState.textContent = "initialized";
+            debug.textContent = "FLOW: " + flow.slice(0, 6) + "…" + (data ? " • data=ok" : " • data=none");
+
+            const s = await fetchState(flow);
+            if (!s) {
+                setBadge("err", "State check failed");
+                cp2.querySelector("span").textContent = "not verified";
+                showError("Network/state error. Please reload.");
+                return;
+            }
+
+            if (s.step >= 2) { window.location.replace("get-key"); return; }
+            if (s.step < 1) {
+                setBadge("warn", "Step not ready");
+                cp2.querySelector("span").textContent = "step not ready";
+                // allow open locker 3 so user can complete it
+                enableLocker(data ? `${LOCKER3_URL}&data=${encodeURIComponent(data)}` : LOCKER3_URL);
+                return;
+            }
+
+            // mark step 2 (include data)
+            try {
+                const r = await j(`${API}/flow/mark`, {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ flow, i: 2, data })
+                });
+
+                if (!r || !r.ok) {
+                    setBadge("warn", "Cannot mark C2");
+                    cp2.querySelector("span").textContent = "mark failed";
+                    showError("Could not confirm Checkpoint 2: " + (r && r.reason || "NETWORK"));
+                    enableLocker(data ? `${LOCKER3_URL}&data=${encodeURIComponent(data)}` : LOCKER3_URL);
+                    return;
+                }
+
+                setBadge("ok", "Session ready");
+                cp2.querySelector("span").textContent = "completed ✓";
+                enableLocker(data ? `${LOCKER3_URL}&data=${encodeURIComponent(data)}` : LOCKER3_URL);
+
+            } catch (e) {
+                setBadge("warn", "Network issue");
+                cp2.querySelector("span").textContent = "mark failed";
+                showError("Network unstable. Please try again.");
+                enableLocker(data ? `${LOCKER3_URL}&data=${encodeURIComponent(data)}` : LOCKER3_URL);
+            }
+        })();
+
+        window.addEventListener("keydown", (e) => {
+            if (e.key.toLowerCase() === "r" && (e.ctrlKey || e.metaKey)) {
+                localStorage.removeItem("astral_flow"); localStorage.removeItem("astral_data"); location.reload();
+            }
+        });
+    </script>
+</body>
+
+</html>

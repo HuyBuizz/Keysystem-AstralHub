@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Astral Hub • Checkpoint 1</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <main class="card" role="main" aria-labelledby="title">
+        <header class="head">
+            <div class="icon" aria-hidden="true">C1</div>
+            <div>
+                <h1 id="title">Checkpoint 1</h1>
+                <div class="sub">Initialize session & open Locker 1</div>
+            </div>
+        </header>
+
+        <section class="body">
+            <div class="steps">
+                <b>Quick guide:</b>
+                <ol class="ok-list">
+                    <li>Session will be initialized.</li>
+                    <li>Click <b>Open Checkpoint 1</b> to access Locker 1.</li>
+                    <li>Come back here, then continue with Checkpoint 2.</li>
+                </ol>
+            </div>
+
+            <div class="status">
+                <span id="apiBadge" class="badge" aria-live="polite">
+                    <span class="dot load"></span> Connecting API…
+                </span>
+            </div>
+
+            <div class="cta">
+                <a id="lockerBtn" class="btn" href="#" rel="noopener noreferrer" target="_blank" aria-disabled="true">
+                    Open Checkpoint 1
+                </a>
+                <span class="ghost">Session status: <span id="flowState">not initialized</span></span>
+            </div>
+        </section>
+
+        <footer class="foot">
+            <div>Error? Press Ctrl/Cmd + R or clear <code class="kv">localStorage["astral_flow"]</code>.</div>
+            <div id="debug" class="muted"></div>
+        </footer>
+    </main>
+
+    <script>
+        const API = "https://acc-key-api.bhieu4225.workers.dev";
+        const LOCKER1_URL = "https://loot-link.com/s?rvkq7FuF";
+
+        const apiBadge = document.getElementById("apiBadge");
+        const flowState = document.getElementById("flowState");
+        const lockerBtn = document.getElementById("lockerBtn");
+        const debug = document.getElementById("debug");
+
+        const setBadge = (t, x) => { apiBadge.innerHTML = `<span class="dot ${t}"></span> ${x}`; };
+        const enableLocker = (h) => { lockerBtn.href = h; lockerBtn.removeAttribute("aria-disabled"); lockerBtn.removeAttribute("disabled"); };
+        const disableLocker = () => { lockerBtn.href = "#"; lockerBtn.setAttribute("aria-disabled", "true"); lockerBtn.setAttribute("disabled", "true"); };
+
+        // fetch JSON (no-store)
+        const j = (url, init = {}) =>
+            fetch(url, { ...init, headers: { ...(init.headers || {}), "cache-control": "no-cache" } }).then(r => r.json());
+
+        // ALWAYS ensure we have a valid flow AND data (signed) before enabling locker
+        async function ensureFreshFlow() {
+            let flow = localStorage.getItem("astral_flow");
+            let data = localStorage.getItem("astral_data");
+
+            // 1) If we already have a flow: verify it still exists in KV AND we have data
+            if (flow) {
+                try {
+                    const s = await j(`${API}/flow/state?flow=${encodeURIComponent(flow)}&t=${Date.now()}`);
+                    const valid = s && s.ok === true;
+                    const hasData = !!data;
+                    if (valid && hasData) {
+                        return { flow, data };
+                    }
+                } catch (e) { /* ignore */ }
+                // State missing/invalid OR no data -> purge and create a new flow
+                localStorage.removeItem("astral_flow");
+                localStorage.removeItem("astral_data");
+                flow = null; data = null;
+            }
+
+            // 2) Create a new flow (will also return signed `data` for &data=)
+            const res = await j(`${API}/flow/start`, { method: "POST" }).catch(() => null);
+            if (res && res.ok && res.flow) {
+                localStorage.setItem("astral_flow", res.flow);
+                if (res.data) localStorage.setItem("astral_data", res.data);
+                return { flow: res.flow, data: res.data || "" };
+            }
+            return { flow: null, data: null };
+        }
+
+        (async () => {
+            disableLocker();
+            setBadge("load", "Connecting API…");
+
+            const { flow, data } = await ensureFreshFlow();
+
+            if (flow) {
+                flowState.textContent = "initialized";
+                setBadge("ok", "Session ready");
+            } else {
+                flowState.textContent = "not initialized";
+                setBadge("warn", "Could not start session – you can still try Locker 1");
+            }
+
+            // always allow opening locker; append &data if available
+            const href = data ? `${LOCKER1_URL}&data=${encodeURIComponent(data)}` : LOCKER1_URL;
+            enableLocker(href);
+
+            debug.textContent = "FLOW: " + (flow ? flow.slice(0, 6) + "…" : "(empty)") + (data ? " • data=ok" : " • data=none");
+        })();
+
+        // quick reset
+        window.addEventListener("keydown", (e) => {
+            if (e.key.toLowerCase() === "r" && (e.ctrlKey || e.metaKey)) {
+                localStorage.removeItem("astral_flow");
+                localStorage.removeItem("astral_data");
+                location.reload();
+            }
+        });
+    </script>
+</body>
+
+</html>
